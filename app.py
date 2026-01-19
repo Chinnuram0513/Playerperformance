@@ -4,119 +4,156 @@ import numpy as np
 import joblib
 import plotly.express as px
 
-# ---------------- PAGE CONFIG ----------------
+# ---------------- CONFIG ----------------
 st.set_page_config(
-    page_title="IPL Player Performance Analysis",
+    page_title="IPL Player Performance Analytics",
     page_icon="🏏",
     layout="wide"
 )
 
-# ---------------- TITLE ----------------
-st.title("🏏 IPL Player Performance Prediction & Analysis")
-st.markdown(
-    "Analyze **player-wise IPL performance** and predict **expected runs** based on recent form."
-)
+st.title("🏏 IPL Player Performance Analytics & Prediction")
+st.caption("Batting • Bowling • Comparison • Venue Analysis • ML Insights")
 
 # ---------------- LOAD DATA ----------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("player_match_batting_stats.csv")
-    df["date"] = pd.to_datetime(df["date"])
-    return df
+    bat = pd.read_csv("player_match_batting_stats.csv")
+    bowl = pd.read_csv("player_match_bowling_stats.csv")
 
-df = load_data()
+    bat["date"] = pd.to_datetime(bat["date"])
+    bowl["date"] = pd.to_datetime(bowl["date"])
+
+    return bat, bowl
+
+bat_df, bowl_df = load_data()
 
 # ---------------- LOAD MODEL ----------------
 model = joblib.load("final_runs_prediction_model.pkl")
 
-# ---------------- PLAYER SELECTION ----------------
-player = st.selectbox(
-    "Select Player",
-    sorted(df["batsman"].unique())
-)
+# ---------------- TABS ----------------
+tab1, tab2, tab3, tab4 = st.tabs([
+    "🏏 Batting Analysis",
+    "🎯 Bowling Analysis",
+    "⚔ Player Comparison",
+    "📊 Model Insights"
+])
 
-player_df = df[df["batsman"] == player].sort_values("date")
+# =====================================================
+# 🏏 BATSMAN ANALYSIS
+# =====================================================
+with tab1:
+    st.subheader("🏏 Batting Performance")
 
-# ---------------- CAREER SUMMARY ----------------
-st.subheader("📊 Career Summary")
+    batsman = st.selectbox("Select Batsman", sorted(bat_df["batsman"].unique()))
+    df = bat_df[bat_df["batsman"] == batsman].sort_values("date")
 
-c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Matches", len(df))
+    c2.metric("Total Runs", int(df["runs_scored"].sum()))
+    c3.metric("Avg Runs", round(df["runs_scored"].mean(), 2))
+    c4.metric("Avg Strike Rate", round(df["strike_rate"].mean(), 2))
 
-c1.metric("Matches", len(player_df))
-c2.metric("Total Runs", int(player_df["runs_scored"].sum()))
-c3.metric("Avg Runs", round(player_df["runs_scored"].mean(), 2))
-c4.metric("Avg Strike Rate", round(player_df["strike_rate"].mean(), 2))
+    fig_runs = px.line(
+        df, x="date", y="runs_scored",
+        title="Runs per Match",
+        markers=True
+    )
+    st.plotly_chart(fig_runs, use_container_width=True)
 
-# ---------------- RECENT FORM ----------------
-st.subheader("🔥 Recent Form")
+    # Prediction
+    last_5 = df.tail(5)
+    last_10 = df.tail(10)
 
-last_5 = player_df.tail(5)
-last_10 = player_df.tail(10)
+    features = np.array([[
+        last_5["runs_scored"].mean(),
+        last_10["runs_scored"].mean(),
+        last_5["strike_rate"].mean(),
+        last_10["strike_rate"].mean()
+    ]])
 
-r1, r2, r3, r4 = st.columns(4)
+    pred = model.predict(features)[0]
+    st.success(f"🔮 Expected Runs Next Match: **{round(pred,1)}**")
 
-r1.metric("Runs (Last 5)", round(last_5["runs_scored"].mean(), 2))
-r2.metric("Runs (Last 10)", round(last_10["runs_scored"].mean(), 2))
-r3.metric("SR (Last 5)", round(last_5["strike_rate"].mean(), 2))
-r4.metric("SR (Last 10)", round(last_10["strike_rate"].mean(), 2))
+# =====================================================
+# 🎯 BOWLING ANALYSIS
+# =====================================================
+with tab2:
+    st.subheader("🎯 Bowling Performance")
 
-# ---------------- RUNS TREND ----------------
-st.subheader("📈 Runs Trend Over Matches")
+    bowler = st.selectbox("Select Bowler", sorted(bowl_df["bowler"].unique()))
+    df = bowl_df[bowl_df["bowler"] == bowler].sort_values("date")
 
-fig_runs = px.line(
-    player_df,
-    x="date",
-    y="runs_scored",
-    markers=True,
-    title="Runs Scored per Match",
-    color_discrete_sequence=["#00E5FF"]
-)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Matches", len(df))
+    c2.metric("Wickets", int(df["wickets"].sum()))
+    c3.metric("Avg Economy", round(df["economy"].mean(), 2))
+    c4.metric("Avg Strike Rate", round(df["strike_rate"].mean(), 2))
 
-st.plotly_chart(fig_runs, use_container_width=True)
+    fig_wickets = px.bar(
+        df.tail(10),
+        x="date",
+        y="wickets",
+        title="Wickets in Last 10 Matches",
+        color="wickets"
+    )
+    st.plotly_chart(fig_wickets, use_container_width=True)
 
-# ---------------- LAST 10 MATCH BAR ----------------
-st.subheader("🏏 Last 10 Match Performance")
+# =====================================================
+# ⚔ PLAYER vs PLAYER
+# =====================================================
+with tab3:
+    st.subheader("⚔ Player vs Player Comparison")
 
-fig_bar = px.bar(
-    last_10,
-    x="date",
-    y="runs_scored",
-    text="runs_scored",
-    color="runs_scored",
-    color_continuous_scale="Viridis",
-    title="Runs in Last 10 Matches"
-)
+    col1, col2 = st.columns(2)
 
-st.plotly_chart(fig_bar, use_container_width=True)
+    p1 = col1.selectbox("Player 1", sorted(bat_df["batsman"].unique()))
+    p2 = col2.selectbox("Player 2", sorted(bat_df["batsman"].unique()), index=1)
 
-# ---------------- STRIKE RATE TREND ----------------
-st.subheader("⚡ Strike Rate Trend")
+    df1 = bat_df[bat_df["batsman"] == p1]
+    df2 = bat_df[bat_df["batsman"] == p2]
 
-fig_sr = px.line(
-    player_df,
-    x="date",
-    y="strike_rate",
-    markers=True,
-    color_discrete_sequence=["#FFD700"],
-    title="Strike Rate Over Time"
-)
+    comp = pd.DataFrame({
+        "Player": [p1, p2],
+        "Avg Runs": [df1["runs_scored"].mean(), df2["runs_scored"].mean()],
+        "Strike Rate": [df1["strike_rate"].mean(), df2["strike_rate"].mean()]
+    })
 
-st.plotly_chart(fig_sr, use_container_width=True)
+    fig_comp = px.bar(
+        comp,
+        x="Player",
+        y=["Avg Runs", "Strike Rate"],
+        barmode="group",
+        title="Player Comparison"
+    )
+    st.plotly_chart(fig_comp, use_container_width=True)
 
-# ---------------- PREDICTION ----------------
-st.subheader("🔮 Run Prediction for Next Match")
+# =====================================================
+# 📊 MODEL INSIGHTS
+# =====================================================
+with tab4:
+    st.subheader("📊 Feature Importance (ML Model)")
 
-features = np.array([[
-    last_5["runs_scored"].mean(),
-    last_10["runs_scored"].mean(),
-    last_5["strike_rate"].mean(),
-    last_10["strike_rate"].mean()
-]])
+    importance = pd.DataFrame({
+        "Feature": [
+            "Runs Last 5",
+            "Runs Last 10",
+            "Strike Rate Last 5",
+            "Strike Rate Last 10"
+        ],
+        "Importance": model.feature_importances_
+    })
 
-predicted_runs = model.predict(features)[0]
+    fig_imp = px.bar(
+        importance,
+        x="Feature",
+        y="Importance",
+        color="Importance",
+        title="Feature Importance"
+    )
 
-st.success(f"🏆 **Expected Runs: {round(predicted_runs, 1)}**")
+    st.plotly_chart(fig_imp, use_container_width=True)
 
-# ---------------- DATA PREVIEW ----------------
-with st.expander("📁 View Player Match Data"):
-    st.dataframe(player_df.tail(10))
+    st.info(
+        "This explains **which factors influence run prediction the most**, "
+        "making the model transparent and explainable."
+    )

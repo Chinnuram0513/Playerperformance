@@ -4,7 +4,7 @@ import numpy as np
 import joblib
 import plotly.express as px
 
-# ---------------- CONFIG ----------------
+# ================= PAGE CONFIG =================
 st.set_page_config(
     page_title="IPL Player Performance Analytics",
     page_icon="🏏",
@@ -14,26 +14,24 @@ st.set_page_config(
 st.title("🏏 IPL Player Performance Analytics & Prediction")
 st.caption("Batting • Bowling • Player Comparison • ML Insights")
 
-# ---------------- LOAD DATA ----------------
+# ================= LOAD DATA =================
 @st.cache_data
 def load_data():
     bat = pd.read_csv("player_match_batting_stats.csv")
     bowl = pd.read_csv("player_match_bowling_stats.csv")
 
-    # Defensive date parsing
+    # Batting data has date
     if "date" in bat.columns:
         bat["date"] = pd.to_datetime(bat["date"], errors="coerce")
-    if "date" in bowl.columns:
-        bowl["date"] = pd.to_datetime(bowl["date"], errors="coerce")
 
     return bat, bowl
 
 bat_df, bowl_df = load_data()
 
-# ---------------- LOAD MODEL ----------------
+# ================= LOAD MODEL =================
 model = joblib.load("final_runs_prediction_model.pkl")
 
-# ---------------- TABS ----------------
+# ================= TABS =================
 tab1, tab2, tab3, tab4 = st.tabs([
     "🏏 Batting Analysis",
     "🎯 Bowling Analysis",
@@ -47,8 +45,10 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader("🏏 Batting Performance")
 
-    batsmen = sorted(bat_df["batsman"].dropna().unique())
-    batsman = st.selectbox("Select Batsman", batsmen)
+    batsman = st.selectbox(
+        "Select Batsman",
+        sorted(bat_df["batsman"].dropna().unique())
+    )
 
     df = bat_df[bat_df["batsman"] == batsman].sort_values("date")
 
@@ -63,11 +63,11 @@ with tab1:
         x="date",
         y="runs_scored",
         markers=True,
-        title="Runs per Match"
+        title="Runs Scored Per Match"
     )
     st.plotly_chart(fig_runs, use_container_width=True)
 
-    # -------- Prediction --------
+    # ---------- Prediction ----------
     last_5 = df.tail(5)
     last_10 = df.tail(10)
 
@@ -82,18 +82,21 @@ with tab1:
         pred = model.predict(features)[0]
         st.success(f"🔮 Expected Runs Next Match: **{round(pred, 1)}**")
     else:
-        st.warning("Not enough recent matches for prediction.")
+        st.warning("Not enough matches for prediction")
 
 # =====================================================
-# 🎯 BOWLING ANALYSIS
+# 🎯 BOWLING ANALYSIS (FIXED)
 # =====================================================
 with tab2:
     st.subheader("🎯 Bowling Performance")
 
-    bowlers = sorted(bowl_df["bowler"].dropna().unique())
-    bowler = st.selectbox("Select Bowler", bowlers)
+    bowler = st.selectbox(
+        "Select Bowler",
+        sorted(bowl_df["bowler"].dropna().unique())
+    )
 
-    df = bowl_df[bowl_df["bowler"] == bowler].sort_values("date")
+    # 🔴 FIX: Bowling data has NO date column
+    df = bowl_df[bowl_df["bowler"] == bowler].sort_values("matchId")
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Matches", len(df))
@@ -103,7 +106,7 @@ with tab2:
 
     fig_wickets = px.bar(
         df.tail(10),
-        x="date",
+        x="matchId",
         y="wickets",
         color="wickets",
         title="Wickets in Last 10 Matches"
@@ -111,27 +114,34 @@ with tab2:
     st.plotly_chart(fig_wickets, use_container_width=True)
 
 # =====================================================
-# ⚔ PLAYER vs PLAYER
+# ⚔ PLAYER vs PLAYER COMPARISON
 # =====================================================
 with tab3:
     st.subheader("⚔ Player vs Player Comparison")
 
     col1, col2 = st.columns(2)
 
-    p1 = col1.selectbox("Player 1", batsmen, index=0)
-    p2 = col2.selectbox("Player 2", batsmen, index=1 if len(batsmen) > 1 else 0)
+    p1 = col1.selectbox(
+        "Player 1",
+        sorted(bat_df["batsman"].dropna().unique())
+    )
+    p2 = col2.selectbox(
+        "Player 2",
+        sorted(bat_df["batsman"].dropna().unique()),
+        index=1
+    )
 
     df1 = bat_df[bat_df["batsman"] == p1]
     df2 = bat_df[bat_df["batsman"] == p2]
 
-    comp = pd.DataFrame({
+    comp_df = pd.DataFrame({
         "Player": [p1, p2],
         "Avg Runs": [df1["runs_scored"].mean(), df2["runs_scored"].mean()],
         "Strike Rate": [df1["strike_rate"].mean(), df2["strike_rate"].mean()]
     })
 
     fig_comp = px.bar(
-        comp,
+        comp_df,
         x="Player",
         y=["Avg Runs", "Strike Rate"],
         barmode="group",
@@ -143,40 +153,28 @@ with tab3:
 # 📊 MODEL INSIGHTS
 # =====================================================
 with tab4:
-    st.subheader("📊 Model Explainability")
+    st.subheader("📊 Model Feature Importance")
 
-    feature_names = [
-        "Runs (Last 5)",
-        "Runs (Last 10)",
-        "Strike Rate (Last 5)",
-        "Strike Rate (Last 10)"
-    ]
+    importance_df = pd.DataFrame({
+        "Feature": [
+            "Runs (Last 5)",
+            "Runs (Last 10)",
+            "Strike Rate (Last 5)",
+            "Strike Rate (Last 10)"
+        ],
+        "Importance": model.feature_importances_
+    })
 
-    if hasattr(model, "feature_importances_"):
-        importance = model.feature_importances_
-    elif hasattr(model, "coef_"):
-        importance = np.abs(model.coef_)
-    else:
-        importance = None
+    fig_imp = px.bar(
+        importance_df,
+        x="Feature",
+        y="Importance",
+        color="Importance",
+        title="Feature Importance"
+    )
+    st.plotly_chart(fig_imp, use_container_width=True)
 
-    if importance is not None:
-        imp_df = pd.DataFrame({
-            "Feature": feature_names,
-            "Importance": importance
-        })
-
-        fig_imp = px.bar(
-            imp_df,
-            x="Feature",
-            y="Importance",
-            color="Importance",
-            title="Feature Importance"
-        )
-        st.plotly_chart(fig_imp, use_container_width=True)
-    else:
-        st.info("Feature importance not available for this model type.")
-
-    st.caption(
-        "This section explains **which recent performance metrics influence predictions most**, "
-        "making the ML model interpretable."
+    st.info(
+        "This chart explains **which features influence the run prediction most**, "
+        "making the ML model transparent and interpretable."
     )

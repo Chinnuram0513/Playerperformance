@@ -20,7 +20,6 @@ def load_data():
     bat = pd.read_csv("player_match_batting_stats.csv")
     bowl = pd.read_csv("player_match_bowling_stats.csv")
 
-    # Batting data has date
     if "date" in bat.columns:
         bat["date"] = pd.to_datetime(bat["date"], errors="coerce")
 
@@ -67,7 +66,7 @@ with tab1:
     )
     st.plotly_chart(fig_runs, use_container_width=True)
 
-    # ---------- Prediction ----------
+    # Prediction
     last_5 = df.tail(5)
     last_10 = df.tail(10)
 
@@ -85,7 +84,7 @@ with tab1:
         st.warning("Not enough matches for prediction")
 
 # =====================================================
-# 🎯 BOWLING ANALYSIS (FIXED)
+# 🎯 BOWLING ANALYSIS (FIXED PROPERLY)
 # =====================================================
 with tab2:
     st.subheader("🎯 Bowling Performance")
@@ -95,14 +94,19 @@ with tab2:
         sorted(bowl_df["bowler"].dropna().unique())
     )
 
-    # 🔴 FIX: Bowling data has NO date column
     df = bowl_df[bowl_df["bowler"] == bowler].sort_values("matchId")
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Matches", len(df))
     c2.metric("Total Wickets", int(df["wickets"].sum()))
     c3.metric("Avg Economy", round(df["economy"].mean(), 2))
-    c4.metric("Avg Strike Rate", round(df["strike_rate"].mean(), 2))
+
+    # ✅ SAFE bowling strike rate
+    if "balls" in df.columns:
+        strike_rate = df["balls"].sum() / max(df["wickets"].sum(), 1)
+        c4.metric("Strike Rate", round(strike_rate, 2))
+    else:
+        c4.metric("Strike Rate", "N/A")
 
     fig_wickets = px.bar(
         df.tail(10),
@@ -114,7 +118,7 @@ with tab2:
     st.plotly_chart(fig_wickets, use_container_width=True)
 
 # =====================================================
-# ⚔ PLAYER vs PLAYER COMPARISON
+# ⚔ PLAYER vs PLAYER
 # =====================================================
 with tab3:
     st.subheader("⚔ Player vs Player Comparison")
@@ -153,7 +157,7 @@ with tab3:
 # 📊 MODEL INSIGHTS
 # =====================================================
 with tab4:
-    st.subheader("📊 Model Feature Importance")
+    st.subheader("📊 Feature Importance")
 
     importance_df = pd.DataFrame({
         "Feature": [
@@ -175,6 +179,5 @@ with tab4:
     st.plotly_chart(fig_imp, use_container_width=True)
 
     st.info(
-        "This chart explains **which features influence the run prediction most**, "
-        "making the ML model transparent and interpretable."
+        "Shows which features most influence the run prediction model."
     )
